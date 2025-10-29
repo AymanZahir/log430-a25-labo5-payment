@@ -32,10 +32,41 @@ def process_payment(payment_id, credit_card_data):
     # Ensuite, faire la mise à jour de la commande dans le Store Manager (en utilisant l'order_id)
     update_result = update_status_to_paid(payment_id)
     print(f"Updated order {update_result['order_id']} to paid={update_result}")
+    if not update_result.get("is_paid"):
+        return update_result
+
+    try:
+        gateway_response = requests.put(
+            "http://api-gateway:8080/store-api/orders",
+            json={
+                "order_id": update_result["order_id"],
+                "is_paid": True
+            },
+            headers={"Content-Type": "application/json"},
+            timeout=5
+        )
+        gateway_response.raise_for_status()
+        order_update = gateway_response.json()
+    except requests.RequestException as error:
+        return {
+            "payment_id": payment_id,
+            "order_id": update_result["order_id"],
+            "is_paid": update_result.get("is_paid", False),
+            "error": f"Echec de la notification au Store Manager: {error}"
+        }
+    except ValueError as error:
+        return {
+            "payment_id": payment_id,
+            "order_id": update_result["order_id"],
+            "is_paid": update_result.get("is_paid", False),
+            "error": f"Réponse invalide du Store Manager: {error}"
+        }
+
     result = {
         "order_id": update_result["order_id"],
         "payment_id": update_result["payment_id"],
-        "is_paid": update_result["is_paid"]
+        "is_paid": update_result["is_paid"],
+        "order_update": order_update
     }
 
     return result
